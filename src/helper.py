@@ -26,5 +26,6 @@ def text_split(extracted_data):
 
 #download embedding model
 def download_hugging_face_embeddings():
-    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+    # Using BAAI/bge-large-en-v1.5 which produces 1024-dimensional embeddings to match Pinecone index
+    embeddings = HuggingFaceEmbeddings(model_name="BAAI/bge-large-en-v1.5")
     return embeddings
