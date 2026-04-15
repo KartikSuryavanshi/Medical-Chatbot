@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>MedBot — Medical Assistant</title>
+	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+	<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+
+	<!-- Toast notification -->
+	<div id="toast" class="toast" aria-live="assertive"></div>
+
+	<!-- Ambient background orbs -->
+	<div class="orb orb1" aria-hidden="true"></div>
+	<div class="orb orb2" aria-hidden="true"></div>
+	<div class="orb orb3" aria-hidden="true"></div>
+
+	<div class="app-shell">
+
+		<!-- Header -->
+		<header class="app-header">
+			<div class="header-left">
+				<div class="bot-avatar">
+					<i class="fas fa-heart-pulse"></i>
+					<span class="pulse-ring"></span>
+					<span class="pulse-ring delay"></span>
+				</div>
+				<div class="header-info">
+					<span class="eyebrow">
+						<span class="status-dot"></span>
+						Online &middot; Powered by Llama 3.2
+					</span>
+					<h1 class="title">MedBot</h1>
+				</div>
+			</div>
+			<button id="clearBtn" class="icon-btn" title="Clear chat" aria-label="Clear chat">
+				<i class="fas fa-rotate-left"></i>
+			</button>
+		</header>
+
+		<!-- Quick chips -->
+		<div id="chips-section" class="chips-section">
+			<p class="chips-label"><i class="fas fa-bolt"></i> Quick questions</p>
+			<div class="chips">
+				<button class="chip" data-q="What are common symptoms of diabetes?"><i class="fas fa-droplet"></i> Diabetes symptoms</button>
+				<button class="chip" data-q="How does high blood pressure affect the heart?"><i class="fas fa-heart"></i> Blood pressure effects</button>
+				<button class="chip" data-q="What are common triggers of asthma attacks?"><i class="fas fa-lungs"></i> Asthma triggers</button>
+				<button class="chip" data-q="What should I monitor when a child has fever?"><i class="fas fa-thermometer-half"></i> Child fever care</button>
+				<button class="chip" data-q="What is cholesterol and why is LDL considered bad?"><i class="fas fa-vial"></i> Cholesterol basics</button>
+				<button class="chip" data-q="What are warning signs of a heart attack?"><i class="fas fa-heart-crack"></i> Heart attack signs</button>
+			</div>
+		</div>
+
+		<!-- Chat area -->
+		<main class="chat-card">
+			<div id="messages" class="messages" aria-live="polite" role="log">
+				<div class="bubble-row bubble-row--bot" id="welcome-msg">
+					<div class="bot-avatar-tiny"><i class="fas fa-heart-pulse"></i></div>
+					<div class="bubble bubble--bot">
+						<p>Hello! I'm <strong>MedBot</strong>, your AI medical companion. Ask me about symptoms, conditions, medications, or treatments and I'll do my best to help.</p>
+						<div class="bubble-footer">
+							<span class="meta"><i class="fas fa-clock"></i> Just now</span>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<!-- Scroll-to-bottom FAB -->
+			<button id="scrollBtn" class="scroll-btn" aria-label="Scroll to bottom">
+				<i class="fas fa-chevron-down"></i>
+			</button>
+
+			<!-- Composer -->
+			<form id="messageForm" class="composer" autocomplete="off">
+				<div class="composer-inner">
+					<input
+						type="text"
+						id="text"
+						name="msg"
+						class="composer-input"
+						placeholder="Ask a medical question…"
+						maxlength="500"
+						required
+					/>
+					<span id="charCount" class="char-count">0 / 500</span>
+				</div>
+				<button type="submit" id="send" class="composer-send" aria-label="Send">
+					<i class="fas fa-paper-plane" id="sendIcon"></i>
+				</button>
+			</form>
+		</main>
+
+		<p class="disclaimer">
+			<i class="fas fa-triangle-exclamation"></i>
+			For informational purposes only. Always consult a qualified healthcare professional.
+		</p>
+	</div>
+
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+	<script>
+	$(function () {
+		const messagesEl  = $('#messages');
+		const inputEl     = $('#text');
+		const sendBtn     = $('#send');
+		const sendIcon    = $('#sendIcon');
+		const scrollBtn   = $('#scrollBtn');
+		let   chatStarted = false;
+
+		/* helpers */
+		function timestamp() {
+			return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+		}
+		function esc(t) { return $('<div/>').text(t).html(); }
+		function scrollBottom(smooth) {
+			messagesEl[0].scrollTo({ top: messagesEl[0].scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
+		}
+		function showToast(msg) {
+			const t = $('#toast');
+			t.text(msg).addClass('show');
+			setTimeout(() => t.removeClass('show'), 2400);
+		}
+		function hideChips() {
+			if (!chatStarted) {
+				chatStarted = true;
+				$('#chips-section').addClass('hidden');
+				$('#welcome-msg').addClass('compact');
+			}
+		}
+
+		/* scroll-to-bottom FAB */
+		messagesEl.on('scroll', function () {
+			const el = messagesEl[0];
+			scrollBtn.toggleClass('visible', el.scrollHeight - el.scrollTop - el.clientHeight > 100);
+		});
+		scrollBtn.on('click', () => scrollBottom(true));
+
+		/* character counter */
+		inputEl.on('input', function () {
+			const len = $(this).val().length;
+			$('#charCount').text(len + ' / 500').toggleClass('warn', len > 440);
+		});
+
+		/* quick chips */
+		$(document).on('click', '.chip', function () {
+			inputEl.val($(this).data('q')).trigger('input').focus();
+		});
+
+		/* clear chat */
+		$('#clearBtn').on('click', function () {
+			messagesEl.children(':not(#welcome-msg)').remove();
+			$('#welcome-msg').removeClass('compact');
+			$('#chips-section').removeClass('hidden');
+			chatStarted = false;
+			showToast('Chat cleared');
+		});
+
+		/* append user bubble */
+		function appendUser(text) {
+			const html = `
+				<div class="bubble-row bubble-row--user msg-enter">
+					<div class="bubble bubble--user">
+						<p>${esc(text)}</p>
+						<div class="bubble-footer"><span class="meta"><i class="fas fa-clock"></i> ${timestamp()}</span></div>
+					</div>
+					<div class="user-avatar"><i class="fas fa-user"></i></div>
+				</div>`;
+			messagesEl.append(html);
+			scrollBottom(true);
+		}
+
+		/* typing indicator */
+		function appendTyping() {
+			const html = `
+				<div class="bubble-row bubble-row--bot msg-enter" id="typing-row">
+					<div class="bot-avatar-tiny"><i class="fas fa-heart-pulse"></i></div>
+					<div class="bubble bubble--bot typing">
+						<span class="dot"></span><span class="dot"></span><span class="dot"></span>
+					</div>
+				</div>`;
+			messagesEl.append(html);
+			scrollBottom(true);
+		}
+		function removeTyping() { $('#typing-row').remove(); }
+
+		/* append bot bubble with typewriter */
+		function appendBot(text) {
+			const ts   = timestamp();
+			const html = `
+				<div class="bubble-row bubble-row--bot msg-enter">
+					<div class="bot-avatar-tiny"><i class="fas fa-heart-pulse"></i></div>
+					<div class="bubble bubble--bot">
+						<p class="tw-target"></p>
+						<div class="bubble-footer">
+							<span class="meta"><i class="fas fa-clock"></i> ${ts}</span>
+							<button class="copy-btn" title="Copy" aria-label="Copy response">
+								<i class="fas fa-copy"></i> Copy
+							</button>
+						</div>
+					</div>
+				</div>`;
+			const $row = $(html);
+			messagesEl.append($row);
+			scrollBottom(true);
+
+			// typewriter effect
+			const $p = $row.find('.tw-target');
+			let i = 0;
+			const iv = setInterval(() => {
+				$p.text(text.slice(0, ++i));
+				scrollBottom(false);
+				if (i >= text.length) clearInterval(iv);
+			}, 16);
+
+			// copy button
+			$row.find('.copy-btn').on('click', function () {
+				navigator.clipboard.writeText(text).then(() => {
+					$(this).html('<i class="fas fa-check"></i> Copied!');
+					setTimeout(() => $(this).html('<i class="fas fa-copy"></i> Copy'), 2000);
+					showToast('Copied to clipboard!');
+				});
+			});
+		}
+
+		/* submit */
+		$('#messageForm').on('submit', function (e) {
+			e.preventDefault();
+			const text = inputEl.val().trim();
+			if (!text) return;
+			hideChips();
+			appendUser(text);
+			inputEl.val('').trigger('input');
+			appendTyping();
+			sendBtn.prop('disabled', true);
+			sendIcon.removeClass('fa-paper-plane').addClass('fa-spinner fa-spin');
+			$.ajax({ type: 'POST', url: '/get', data: { msg: text } })
+				.done(data => { removeTyping(); appendBot(data); })
+				.fail(()   => { removeTyping(); appendBot("Sorry, I couldn't reach the server. Please try again."); })
+				.always(() => {
+					sendBtn.prop('disabled', false);
+					sendIcon.removeClass('fa-spinner fa-spin').addClass('fa-paper-plane');
+					inputEl.focus();
+				});
+		});
+
+		inputEl.focus();
+	});
+	</script>
+</body>
+</html>
